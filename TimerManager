@@ -1,0 +1,146 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public delegate void TimerHandler();
+
+public delegate void TimerArgsHandler(object[] args);
+
+public class TimeManager : SingletonMonoManager<TimeManager>
+{
+    /// <summary>
+    ///     时间管理器
+    /// </summary>
+    private readonly List<Timer> _timers = new List<Timer>();
+
+    public Timer CreateTimer(TimerHandler callBack, float time, int repeats = 1)
+    {
+        return Create(callBack, null, time, repeats);
+    }
+
+    public Timer CreateTimer(TimerArgsHandler callBack, float time, int repeats, params object[] args)
+    {
+        if (args == null) throw new ArgumentNullException("args");
+        return Create(null, callBack, time, repeats, args);
+    }
+
+    private Timer Create(TimerHandler callBack, TimerArgsHandler callBackArgs, float time, int repeats,
+        params object[] args)
+    {
+        var timer = new Timer(callBack, callBackArgs, time, repeats, args);
+        _timers.Add(timer);
+        return timer;
+    }
+
+    public void DestroyTimer(Timer timer)
+    {
+        if (timer != null)
+        {
+            _timers.Remove(timer);
+            timer.CleanUp();
+        }
+    }
+
+    /// <summary>
+    ///     固定更新检查更新的频率
+    /// </summary>
+    private void FixedUpdate()
+    {
+        if (_timers.Count != 0)
+        {
+            for (var i = _timers.Count - 1; i >= 0; i--)
+            {
+                var timer = _timers[i];
+                var curTime = Time.time;
+                if (timer.Frequency + timer.LastTickTime > curTime)
+                {
+                    continue;
+                }
+                timer.LastTickTime = curTime;
+
+                Debug.Log(timer.Repeats);
+                if (timer.Repeats-- == 0)
+                {
+                    //计时完成，可以删除了
+                    DestroyTimer(timer);
+                }
+                else
+                {
+                    //触发计时
+                    timer.Notify();
+                }
+            }
+        }
+    }
+}
+
+public class Timer
+{
+    public object[] Args;
+    public TimerArgsHandler ArgsHandler;
+
+    /// <summary>
+    ///     时间间隔
+    /// </summary>
+    public float Frequency;
+
+    public TimerHandler Handler;
+
+    /// <summary>
+    ///     是否完成
+    /// </summary>
+    public bool IsComplete = true;
+
+    public float LastTickTime;
+
+    /// <summary>
+    ///     重复次数
+    /// </summary>
+    public int Repeats;
+
+    public Timer()
+    {
+    }
+
+    /// <summary>
+    ///     创建一个时间事件对象
+    /// </summary>
+    /// <param name="handler">回调函数</param>
+    /// <param name="argsHandler">带参数的回调函数</param>
+    /// <param name="frequency">时间内执行</param>
+    /// <param name="repeats">重复次数</param>
+    /// <param name="args">参数 可以任意的传不定数量，类型的参数</param>
+    public Timer(TimerHandler handler, TimerArgsHandler argsHandler, float frequency, int repeats, object[] args)
+    {
+        Handler = handler;
+        ArgsHandler = argsHandler;
+        Frequency = frequency;
+        Repeats = repeats == 0 ? 1 : repeats;
+        Args = args;
+        LastTickTime = Time.time;
+    }
+
+    public void Notify()
+    {
+        if (Handler != null)
+        {
+            Handler();
+        }
+        if (ArgsHandler != null)
+        {
+            ArgsHandler(Args);
+        }
+    }
+
+    /// <summary>
+    ///     清空
+    /// </summary>
+    public void CleanUp()
+    {
+        Handler = null;
+        ArgsHandler = null;
+        IsComplete = true;
+        Repeats = 1;
+        Frequency = 0;
+    }
+}
